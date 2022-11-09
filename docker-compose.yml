@@ -1,27 +1,61 @@
-version: '3.3'
+version: '3.8'
+
+#
+# The Firefly III Data Importer will ask you for the Firefly III URL and a "Client ID".
+# You can generate the Client ID at http://localhost/profile (after registering)
+# The Firefly III URL is: http://app:8080
+#
+# Other URL's will give 500 | Server Error
+#
 
 services:
   app:
     image: fireflyiii/core:latest
-    restart: always
+    hostname: app
+    networks:
+      - firefly
+      - internal
+      - web
+    restart: unless-stopped
     volumes:
       - firefly_iii_upload:/var/www/html/storage/upload
-    env_file: .env
-    ports:
-      - 80:8080
-    depends_on:
-      - db
-  db:
-    image: mariadb    
-    hostname: fireflyiiidb
-    restart: always
     environment:
-      - MYSQL_RANDOM_ROOT_PASSWORD=yes
-      - MYSQL_USER=firefly
-      - MYSQL_PASSWORD=secret_firefly_password
-      - MYSQL_DATABASE=firefly
-    volumes:
-      - firefly_iii_db:/var/lib/mysql
+      - APP_URL="https://${FIREFLYIII_DOMAIN}"
+      - TRUSTED_PROXIES=**
+      - APP_KEY=${APP_KEY}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_CONNECTION=${DB_CONNECTION}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+    labels:
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      # - "traefik.http.middlewares.fireflyiii-headers.headers.framedeny=false"
+      # - "traefik.http.middlewares.fireflyiii-headers.headers.sslredirect=true"
+      # - "traefik.http.middlewares.fireflyiii-headers.headers.stsSeconds=155520011"
+      # - "traefik.http.middlewares.fireflyiii-headers.headers.stsIncludeSubdomains=true"
+      # - "traefik.http.middlewares.fireflyiii-headers.headers.stsPreload=true"
+      - "traefik.http.routers.fireflyiii.rule=Host(`${FIREFLYIII_DOMAIN}`)"
+      - "traefik.http.routers.fireflyiii.entrypoints=websecure"
+      - "traefik.http.routers.fireflyiii.tls=true"
+      - "traefik.http.routers.fireflyiii.tls.certresolver=leresolver"
+      # - "traefik.http.routers.fireflyiii.middlewares=fireflyiii-headers@docker"
+      - "traefik.http.services.fireflyiii.loadbalancer.server.port=8080"
+
+  # db:
+    # CREATE USER firefly WITH ENCRYPTED PASSWORD 'secret'
+    # pg_dump --verbose --host=localhost --port=5432 --username=firefly --create --file /dumps/firefly-$(date +%Y-%m-%d-%H.%M.%S).sql -n public firefly
+    # psql -U postgres -d postgres < /dumps/firefly-2022-08-24-04.15.20.sql
+
 volumes:
-   firefly_iii_upload:
-   firefly_iii_db:
+  firefly_iii_upload:
+
+networks:
+  firefly:
+    driver: bridge
+  internal:
+    external: true
+  web:
+    external: true
